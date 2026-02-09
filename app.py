@@ -1,20 +1,16 @@
 import os
 import io
-import torch
-import nest_asyncio
+import requests
 from telegram import Update
 from telegram.ext import ApplicationBuilder, MessageHandler, filters, ContextTypes
-from transformers import AutoModelForImageSegmentation
-from torchvision import transforms
-from PIL import Image
-from threading import Thread
 from flask import Flask
+from threading import Thread
 
-# 1. تشغيل Flask لحل مشكلة Port Binding في Render
+# 1. إعداد سيرفر الويب الصغير لـ Render
 app_web = Flask('')
 @app_web.route('/')
 def home():
-    return "AI Bot is Live!"
+    return "AI Bot is Live and linked to Hugging Face!"
 
 def run_flask():
     port = int(os.environ.get('PORT', 10000))
@@ -22,195 +18,41 @@ def run_flask():
 
 Thread(target=run_flask).start()
 
-# 2. إعدادات الموديل
-nest_asyncio.apply()
-device = "cpu"
-model = AutoModelForImageSegmentation.from_pretrained("ZhengPeng7/BiRefNet", trust_remote_code=True)
-model.to(device)
-model.eval()
+# 2. إعدادات الربط مع Hugging Face (المصنع)
+# تأكد أنك أضفت HF_TOKEN في إعدادات Render
+API_URL = "https://api-inference.huggingface.co/models/ZhengPeng7/BiRefNet"
+HF_TOKEN = os.getenv("HF_TOKEN")
+headers = {"Authorization": f"Bearer {HF_TOKEN}"}
 
-# تأكد أن هذا الجزء في كودك يشبه هذا تماماً
-transform_image = transforms.Compose([
-    transforms.Resize((1024, 1024)),
-    transforms.ToTensor(),
-    transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
-]) # هذا هو القوس الذي كان يسبب المشكلة، تأكد من وجوده مرة واحدة فقط
-
+def query_hugging_face(image_bytes):
+    response = requests.post(API_URL, headers=headers, data=image_bytes)
+    return response.content
 
 async def process_and_remove_bg(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    status_msg = await update.message.reply_text("⏳ جاري تنقية الصورة...")
+    status_msg = await update.message.reply_text("⏳ جاري المعالجة في مختبر الهجين...")
     try:
+        # تحميل الصورة من تليجرام
         photo_file = await update.message.photo[-1].get_file()
         photo_bytes = await photo_file.download_as_bytearray()
-        input_image = Image.open(io.BytesIO(photo_bytes)).convert("RGB")
         
-        input_tensor = transform_image(input_image).unsqueeze(0).to(device)
-        with torch.no_grad():
-            preds = model(input_tensor)[-1].sigmoid().cpu()
+        # إرسال الصورة لهجين وقص الخلفية هناك
+        processed_image_bytes = query_hugging_face(photo_bytes)
         
-        mask = transforms.ToPILImage()(preds[0].float().squeeze()).resize(input_image.size)
-        input_image.putalpha(mask)
+        # إرسال النتيجة للمستخدم
+        out_io = io.BytesIO(processed_image_bytes)
+        out_io.name = "no_bg.png"
+        await update.message.reply_document(document=out_io, caption="✨ تمت المعالجة بواسطة Hugging Face!")
         
-        out_io = io.BytesIO()
-        input_image.save(out_io, 'PNG')
-        out_io.seek(0)
-        await update.message.reply_document(document=out_io, filename="no_bg.png", caption="✨ تفضل صورتك بدون خلفية!")
     except Exception as e:
         print(f"Error: {e}")
-        await update.message.reply_text("❌ حدث خطأ برميجي، حاول مرة أخرى.")
+        await update.message.reply_text("❌ حدث تأخير في الاستجابة، حاول مرة أخرى.")
     finally:
         await status_msg.delete()
 
 if __name__ == '__main__':
-    TOKEN = os.getenv("BOT_TOKEN")
-    if TOKEN:
-        app = ApplicationBuilder().token(TOKEN).build()
+    BOT_TOKEN = os.getenv("BOT_TOKEN")
+    if BOT_TOKEN:
+        app = ApplicationBuilder().token(BOT_TOKEN).build()
         app.add_handler(MessageHandler(filters.PHOTO, process_and_remove_bg))
-        print("🚀 البوت انطلق...")
+        print("🚀 البوت يعمل الآن بالربط الهجين...")
         app.run_polling()
-])
-
-async def process_and_remove_bg(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    status_msg = await update.message.reply_text("⏳ جاري المعالجة...")
-    try:
-        photo_file = await update.message.photo[-1].get_file()
-        photo_bytes = await photo_file.download_as_bytearray()
-        input_image = Image.open(io.BytesIO(photo_bytes)).convert("RGB")
-        
-        input_tensor = transform_image(input_image).unsqueeze(0).to(device)
-        with torch.no_grad():
-            preds = model(input_tensor)[-1].sigmoid().cpu()
-        
-        mask = transforms.ToPILImage()(preds[0].float().squeeze()).resize(input_image.size)
-        input_image.putalpha(mask)
-        
-        out_io = io.BytesIO()
-        input_image.save(out_io, 'PNG')
-        out_io.seek(0)
-        await update.message.reply_document(document=out_io, filename="no_bg.png")
-    except Exception as e:
-        print(f"Error: {e}")
-        await update.message.reply_text("❌ حدث خطأ غير متوقع.")
-    finally:
-        await status_msg.delete()
-
-if __name__ == '__main__':
-    TOKEN = os.getenv("BOT_TOKEN")
-    if TOKEN:
-        app = ApplicationBuilder().token(TOKEN).build()
-        app.add_handler(MessageHandler(filters.PHOTO, process_and_remove_bg))
-        print("🚀 Starting Bot...")
-        app.run_polling()
-
-async def process_and_remove_bg(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    status_msg = await update.message.reply_text("⏳ جاري معالجة صورتك... انتظر قليلاً")
-    try:
-        photo_file = await update.message.photo[-1].get_file()
-        photo_bytes = await photo_file.download_as_bytearray()
-        input_image = Image.open(io.BytesIO(photo_bytes)).convert("RGB")
-        
-        input_tensor = transform_image(input_image).unsqueeze(0).to(device)
-        with torch.no_grad():
-            preds = model(input_tensor)[-1].sigmoid().cpu()
-        
-        mask = transforms.ToPILImage()(preds[0].float().squeeze()).resize(input_image.size)
-        input_image.putalpha(mask)
-        
-        out_io = io.BytesIO()
-        input_image.save(out_io, 'PNG')
-        out_io.seek(0)
-        await update.message.reply_document(document=out_io, filename="no_bg.png")
-    except Exception as e:
-        print(f"Error: {e}")
-        await update.message.reply_text("❌ عذراً، حدث خطأ أثناء المعالجة.")
-    finally:
-        await status_msg.delete()
-
-if __name__ == '__main__':
-    TOKEN = os.getenv("BOT_TOKEN")
-    if TOKEN:
-        app = ApplicationBuilder().token(TOKEN).build()
-        app.add_handler(MessageHandler(filters.PHOTO, process_and_remove_bg))
-        print("🚀 البوت انطلق...")
-        app.run_polling()
-    transforms.Resize((1024, 1024)),
-    transforms.ToTensor(),
-    transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
-])
-
-async def process_and_remove_bg(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    status_msg = await update.message.reply_text("⏳ جاري تنقية الصورة... يرجى الانتظار")
-    try:
-        photo_file = await update.message.photo[-1].get_file()
-        photo_bytes = await photo_file.download_as_bytearray()
-        input_image = Image.open(io.BytesIO(photo_bytes)).convert("RGB")
-        original_size = input_image.size
-
-        input_tensor = transform_image(input_image).unsqueeze(0).to(device)
-        if device == "cuda":
-            input_tensor = input_tensor.to(model.dtype)
-
-        with torch.no_grad():
-            preds = model(input_tensor)[-1].sigmoid().cpu()
-        
-        mask = transforms.ToPILImage()(preds[0].float().squeeze())
-        mask = mask.resize(original_size)
-        input_image.putalpha(mask)
-        
-        out_io = io.BytesIO()
-        input_image.save(out_io, 'PNG')
-        out_io.seek(0)
-        await update.message.reply_document(document=out_io, filename="no_bg.png", caption="✨ تم التخلص من الخلفية بنجاح!")
-    except Exception as e:
-        await update.message.reply_text(f"❌ حدث خطأ أثناء المعالجة: {str(e)}")
-    finally:
-        await status_msg.delete()
-
-if __name__ == '__main__':
-    # تأكد من إضافة BOT_TOKEN في إعدادات Render (Environment Variables)
-    TOKEN = os.getenv("BOT_TOKEN") 
-    if not TOKEN:
-        print("❌ Error: BOT_TOKEN not found!")
-    else:
-        app = ApplicationBuilder().token(TOKEN).build()
-        app.add_handler(MessageHandler(filters.PHOTO, process_and_remove_bg))
-        print("🚀 البوت يعمل الآن...")
-        app.run_polling(close_loop=False)
-        input_image = Image.open(io.BytesIO(photo_bytes)).convert("RGB")
-        original_size = input_image.size
-
-        # المعالجة بالذكاء الاصطناعي
-        input_tensor = transform_image(input_image).unsqueeze(0).to(device)
-        if device == "cuda":
-            input_tensor = input_tensor.to(model.dtype)
-
-        with torch.no_grad():
-            preds = model(input_tensor)[-1].sigmoid().cpu()
-        
-        mask = transforms.ToPILImage()(preds[0].float().squeeze())
-        mask = mask.resize(original_size)
-        
-        # تطبيق الشفافية
-        input_image.putalpha(mask)
-        
-        # تحويل النتيجة لملف لإرساله
-        out_io = io.BytesIO()
-        input_image.save(out_io, 'PNG')
-        out_io.seek(0)
-
-        await update.message.reply_document(document=out_io, filename="no_bg.png", caption="✨ تم التخلص من الخلفية بنجاح!")
-    except Exception as e:
-        await update.message.reply_text(f"❌ حدث خطأ أثناء المعالجة: {str(e)}")
-    finally:
-        await status_msg.delete()
-
-# 3. تشغيل البوت
-if __name__ == '__main__':
-    TOKEN = os.getenv("BOT_TOKEN") # سيتم جلبه من إعدادات Render
-    if not TOKEN:
-        print("❌ Error: BOT_TOKEN not found in environment variables!")
-    else:
-        app = ApplicationBuilder().token(TOKEN).build()
-        app.add_handler(MessageHandler(filters.PHOTO, process_and_remove_bg))
-        print("🚀 البوت يعمل الآن...")
-        app.run_polling(close_loop=False)
