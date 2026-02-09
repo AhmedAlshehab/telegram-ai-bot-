@@ -7,7 +7,8 @@ from telegram import Update
 from telegram.ext import Application, MessageHandler, filters, ContextTypes, CommandHandler
 from PIL import Image
 import requests
-
+application = Application.builder().token(BOT_TOKEN).build()
+    
 # Configure logging
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -180,7 +181,6 @@ def main():
     logger.info("Flask server started on port 10000")
     
     # Create the Application
-    application = Application.builder().token(BOT_TOKEN).build()
     
     # Add handlers
     application.add_handler(CommandHandler("start", start))
@@ -198,12 +198,13 @@ def main():
     
     # Configure polling with timeouts and drop pending updates
         # الكود الصحيح والمختصر
-    application.run_polling(
+    # 2. تشغيل البوت (Method Call)
+if __name__ == '__main__':
+    # استخدم الاسم الذي اخترته فوق (مثلاً app) وليس كلمة Application
+    app.run_polling(
         allowed_updates=Update.ALL_TYPES,
         drop_pending_updates=True
     )
 
-if __name__ == '__main__':
-    # إضافة drop_pending_updates=True تمسح أي طلبات معلقة وتنهي النزاعات القديمة
-    application.run_polling(drop_pending_updates=True)
+
     main()
