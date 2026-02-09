@@ -67,7 +67,8 @@ async def process_and_remove_bg(update: Update, context: ContextTypes.DEFAULT_TY
 if __name__ == '__main__':
     BOT_TOKEN = os.getenv("BOT_TOKEN")
     if BOT_TOKEN:
-        app = ApplicationBuilder().token(BOT_TOKEN).build()
+        # أضفنا read_timeout و connect_timeout لزيادة وقت الانتظار إلى 60 ثانية
+        app = ApplicationBuilder().token(BOT_TOKEN).read_timeout(60).connect_timeout(60).build()
         app.add_handler(MessageHandler(filters.PHOTO, process_and_remove_bg))
-        print("🚀 البوت يعمل الآن بالربط الهجين...")
+        print("🚀 البوت يعمل الآن مع زيادة وقت الانتظار...")
         app.run_polling()
