@@ -203,5 +203,8 @@ def main():
         drop_pending_updates=True
     )
 
-if __name__ == '__main__':
+if __name__ == "__main__":
+    # Render يرسل المنفذ عبر متغير بيئة، وإذا لم يجده يستخدم 5000 كافتراضي
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host='0.0.0.0', port=port)
     main()
