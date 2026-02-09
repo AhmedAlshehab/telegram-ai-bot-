@@ -1,16 +1,21 @@
 # استخدام نسخة بايثون رسمية وخفيفة
-# تغيير النسخة لنسخة أكثر استقراراً
-FROM python:3.10-slim
+# سنستخدم نسخة كاملة بدلاً من slim لتجنب التحميل من الخارج
+FROM python:3.10
 
-ENV PYTHONUNBUFFERED=1
+# منع بايثون من إنشاء ملفات pyc
+ENV PYTHONDONTWRITEBYTECODE 1
+ENV PYTHONUNBUFFERED 1
 
 WORKDIR /app
 
-# إضافة خيارات لإعادة المحاولة في حال فشل الشبكة
-RUN apt-get update --fix-missing && apt-get install -y \
-    libgl1-mesa-glx \
-    libglib2.0-0 \
-    && rm -rf /var/lib/apt/lists/*
+# لن نحتاج لـ apt-get update هنا لأن النسخة الكاملة تحتوي على المكتبات غالباً
+# سنكتفي بتثبيت مكتبات بايثون مباشرة
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY . .
+
+CMD ["python", "app.py"]
 
 
 # تثبيت مكتبات بايثون
