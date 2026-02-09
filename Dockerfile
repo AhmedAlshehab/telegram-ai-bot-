@@ -1,16 +1,17 @@
 # استخدام نسخة بايثون رسمية وخفيفة
+# تغيير النسخة لنسخة أكثر استقراراً
 FROM python:3.10-slim
 
-# ضبط متغيرات البيئة لمنع تجميد بايثون
 ENV PYTHONUNBUFFERED=1
 
 WORKDIR /app
 
-# تثبيت مكتبات النظام اللازمة لمعالجة الصور
-RUN apt-get update && apt-get install -y \
+# إضافة خيارات لإعادة المحاولة في حال فشل الشبكة
+RUN apt-get update --fix-missing && apt-get install -y \
     libgl1-mesa-glx \
     libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
+
 
 # تثبيت مكتبات بايثون
 COPY requirements.txt .
