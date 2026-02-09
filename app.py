@@ -10,20 +10,19 @@ from PIL import Image
 from threading import Thread
 from flask import Flask
 
-# 1. إعداد Flask لتجنب خطأ Port Binding
+# 1. تشغيل Flask لحل مشكلة Port Binding في Render
 app_web = Flask('')
 @app_web.route('/')
 def home():
-    return "Bot is alive and running!"
+    return "AI Bot is Live!"
 
 def run_flask():
     port = int(os.environ.get('PORT', 10000))
     app_web.run(host='0.0.0.0', port=port)
 
-# تشغيل Flask في الخلفية
 Thread(target=run_flask).start()
 
-# 2. تشغيل الموديل
+# 2. إعدادات الموديل
 nest_asyncio.apply()
 device = "cpu"
 model = AutoModelForImageSegmentation.from_pretrained("ZhengPeng7/BiRefNet", trust_remote_code=True)
@@ -34,6 +33,39 @@ transform_image = transforms.Compose([
     transforms.Resize((1024, 1024)),
     transforms.ToTensor(),
     transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+])
+
+async def process_and_remove_bg(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    status_msg = await update.message.reply_text("⏳ جاري تنقية الصورة...")
+    try:
+        photo_file = await update.message.photo[-1].get_file()
+        photo_bytes = await photo_file.download_as_bytearray()
+        input_image = Image.open(io.BytesIO(photo_bytes)).convert("RGB")
+        
+        input_tensor = transform_image(input_image).unsqueeze(0).to(device)
+        with torch.no_grad():
+            preds = model(input_tensor)[-1].sigmoid().cpu()
+        
+        mask = transforms.ToPILImage()(preds[0].float().squeeze()).resize(input_image.size)
+        input_image.putalpha(mask)
+        
+        out_io = io.BytesIO()
+        input_image.save(out_io, 'PNG')
+        out_io.seek(0)
+        await update.message.reply_document(document=out_io, filename="no_bg.png", caption="✨ تفضل صورتك بدون خلفية!")
+    except Exception as e:
+        print(f"Error: {e}")
+        await update.message.reply_text("❌ حدث خطأ برميجي، حاول مرة أخرى.")
+    finally:
+        await status_msg.delete()
+
+if __name__ == '__main__':
+    TOKEN = os.getenv("BOT_TOKEN")
+    if TOKEN:
+        app = ApplicationBuilder().token(TOKEN).build()
+        app.add_handler(MessageHandler(filters.PHOTO, process_and_remove_bg))
+        print("🚀 البوت انطلق...")
+        app.run_polling()
 ])
 
 async def process_and_remove_bg(update: Update, context: ContextTypes.DEFAULT_TYPE):
